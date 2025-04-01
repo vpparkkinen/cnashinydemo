@@ -11,13 +11,14 @@ library(DiagrammeR)
 ui <- page_fluid(
   navset_tab(id = "panel",
              nav_panel("vanilla cna", value = "cna",
+                       
                        page_sidebar(
                          sidebar = sidebar(
-                           selectInput("data", 
+                           selectInput("data1", 
                                        label = "data", 
                                        choices = c("d.error", "d.educate")),
                            actionButton("disp", label = "view data"),
-                           tableOutput("dataset"),
+                           #tableOutput("dataset"),
                            sliderInput("con", 
                                        label = "consistency", 
                                        min = 0.5, max = 1, value = 1),
@@ -26,7 +27,7 @@ ui <- page_fluid(
                                        min = 0.5, max = 1, value = 1),
                            varSelectInput("out", 
                                           label = "outcome", 
-                                          "data", multiple = TRUE),
+                                          "data1", multiple = TRUE),
                            actionButton("goButton", "Run"), offset = 1
                          ),
                          navset_card_underline(
@@ -42,7 +43,7 @@ ui <- page_fluid(
              nav_panel("frscored_cna", value = "frscored_cna",
                        page_sidebar(
                          sidebar = sidebar(
-                           selectInput("data", 
+                           selectInput("data2", 
                                        label = "data", 
                                        choices = c("d.error", "d.educate")),
                            actionButton("disp", label = "view data"),
@@ -71,11 +72,25 @@ ui <- page_fluid(
 
 
 server <- function(input, output, session){
-  dat <- reactive({switch(input$data,
+  
+  shared_state <- reactiveValues(data = "d.error")
+  
+  
+  observeEvent(input$data1, {
+    shared_state$data <- input$data1
+    updateSelectInput(session, "data2", selected = shared_state$data)
+  })
+  
+  observeEvent(input$data2, {
+    shared_state$data <- input$data2
+    updateSelectInput(session, "data1", selected = shared_state$data)
+  })
+  
+  dat <- reactive({switch(shared_state$data,
                           "d.error" = frscore::d.error,
                           "d.educate" = cna::d.educate)})
   
-
+  
   observeEvent(input$disp, {
     showModal((modalDialog(
       title = input$data,
@@ -89,15 +104,15 @@ server <- function(input, output, session){
     c(as.character(input$out))
   })
   
-  observe({
-    updateSelectInput(session, "data", label = "data", choices = c("d.error",
-                                                                   "d.educate"))
-  })
-  
-  
-  observeEvent(dat(), {
-    updateVarSelectInput(session, "out", data = dat())
-  })
+  # observe({
+  #   updateSelectInput(session, "data", label = "data", choices = c("d.error",
+  #                                                                  "d.educate"))
+  # })
+  # 
+  # 
+  # observeEvent(dat(), {
+  #   updateVarSelectInput(session, "out", data = dat())
+  # })
   
   
   rescna <- eventReactive(input$goButton, {
