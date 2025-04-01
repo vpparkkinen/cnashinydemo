@@ -5,6 +5,8 @@ library(shinythemes)
 library(DT)
 library(frscore)
 library(visNetwork)
+library(causalHyperGraph)
+library(DiagrammeR)
 
 ui <- page_fluid(
   navset_tab(id = "panel",
@@ -31,7 +33,9 @@ ui <- page_fluid(
                            title = "Results",
                            nav_panel("Models", DTOutput("cnares")),
                            nav_panel("Hypergraphs", 
-                                     verbatimTextOutput("hyper"))
+                                     #verbatimTextOutput("hyper"))
+                                     #grVizOutput("hyper"))
+                                     uiOutput("hyper"))
                          )
                        )
              ),
@@ -127,11 +131,37 @@ server <- function(input, output, session){
   }})
   output$plot <- renderVisNetwork(plot())
   
+  # hgraph <- reactive({
+  #   if(input$panel == "cna"){chg(rescna()$condition)[[1]]$graph}
+  # })
+
+############## dynamic UI version
+    
   hgraph <- reactive({
-    if(input$panel == "cna"){"TODO: Hypergraphs here"}
+    if(input$panel == "cna"){lapply(rescna()$condition, \(x) chg(x)[[1]]$graph)}
+  })
+
+  output$hyper <- renderUI({
+    pl <- lapply(seq_along(hgraph()), \(x){
+      plname <- paste("plot", x, sep = "")
+      grVizOutput(plname)
+    })
+    do.call(tagList, pl)
+  })
+
+  observe({
+    for(i in seq_along(hgraph())){
+      local({
+        ic <- i
+        plotname <- paste0("plot", ic)
+        print(ic)
+        output[[plotname]] <- renderGrViz(hgraph()[[ic]])
+      })
+    }
   })
   
-  output$hyper <- renderText(hgraph())
+############
+  #output$hyper <- renderGrViz({hgraph()})
   
 }
 
