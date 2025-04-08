@@ -7,6 +7,7 @@ library(frscore)
 library(visNetwork)
 library(causalHyperGraph)
 library(DiagrammeR)
+library(sortable)
 
 ui <- page_fluid(
   navset_tab(id = "panel",
@@ -28,14 +29,14 @@ ui <- page_fluid(
                            varSelectInput("out", 
                                           label = "outcome", 
                                           "data1", multiple = TRUE),
+                           actionButton("order.button1",
+                                        label = "Enter ordering"),
                            actionButton("goButton", "Run"), offset = 1
                          ),
                          navset_card_underline(
                            title = "Results",
                            nav_panel("Models", DTOutput("cnares")),
                            nav_panel("Hypergraphs", 
-                                     #verbatimTextOutput("hyper"))
-                                     #grVizOutput("hyper"))
                                      uiOutput("hyper"))
                          )
                        )
@@ -52,11 +53,13 @@ ui <- page_fluid(
                                        label = "fit.range", 
                                        min = 0.5, max = 1, value = c(0.7, 1)),
                            numericInput("granularity", 
-                                        label = "granularity", 0.05, 0.1, 
+                                        label = "granularity", 0.1, 0.05, 
                                         step = 0.05),
                            varSelectInput("out", 
                                           label = "outcome", 
                                           "data", multiple = TRUE),
+                           actionButton("order.button2",
+                                        label = "Enter ordering"),
                            actionButton("goButton", "Run"), offset = 1
                          ),
                          navset_card_underline(
@@ -90,6 +93,92 @@ server <- function(input, output, session){
                           "d.error" = frscore::d.error,
                           "d.educate" = cna::d.educate)})
   
+  orl <- reactiveVal()
+  
+  rlist_items <- function(dataset){
+    lapply(seq_along(dataset), function(x) {
+      add_rank_list(
+        text = paste("level", x),
+        labels =  if (x == 1) colnames(dataset) else character(0L),
+        input_id = paste0("rlist",x)
+      )
+    })
+  }
+  
+  # share `ordering` 
+  order_states <- reactiveValues(
+    blists = NULL,
+    cnaordering = NULL
+    )
+  
+  
+  ordering_modal <- function(button, dataset){
+    #rank_list_items <- rlist_items(dataset)
+    rank_list_items <- if(is.null(order_states$blists)){
+      rlist_items(dataset)
+    } else {
+      order_states$blists
+    }
+    #print(rank_list_items)
+    showModal(
+      modalDialog(
+        title = "Ordering",
+        renderUI({
+          do.call("bucket_list", args = c(
+            list(header = "",
+                 group_name = "order_bucket",
+                 orientation = "horizontal"),
+            
+            rank_list_items
+          ))
+        }),
+        footer = tagList(
+          actionButton(button, "Update"),
+          modalButton("Close")
+        )
+      )
+    )
+  }
+  
+  upd_listvals <- function(){
+    upd_vals <- lapply(seq_along(dat()), function(x) {
+      input[[paste0("rlist", x)]]
+    })
+    upd_vals <- upd_vals[sapply(upd_vals, \(x) length(x)>0)] 
+    return(upd_vals)
+  }
+  
+  upd_ranklist <- function(dataset){
+    upr <- lapply(seq_along(dataset), \(x){
+      add_rank_list(
+        text = paste("level", x),
+        labels = input[[paste0("rlist", x)]],
+        input_id = paste0("rlist",x)
+      )
+    })
+    return(upr)
+  }
+  
+  observeEvent(input$order.button1, {
+    ordering_modal("update.button1", dat())
+  })
+  
+  observeEvent(input$update.button1, {
+    order_states$blists <- upd_ranklist(dat())
+    order_states$cnaordering <- upd_listvals()
+    print(order_states$blists)
+    removeModal()
+  })
+  
+  observeEvent(input$order.button2, {
+    ordering_modal("update.button2", dat())
+  })
+  
+  observeEvent(input$update.button2, {
+    order_states$blists <- upd_ranklist(dat())
+    order_states$cnaordering <- upd_listvals()
+    removeModal()
+  })
   
   observeEvent(input$disp, {
     showModal((modalDialog(
@@ -104,26 +193,17 @@ server <- function(input, output, session){
     c(as.character(input$out))
   })
   
-  # observe({
-  #   updateSelectInput(session, "data", label = "data", choices = c("d.error",
-  #                                                                  "d.educate"))
-  # })
-  # 
-  # 
-  # observeEvent(dat(), {
-  #   updateVarSelectInput(session, "out", data = dat())
-  # })
-  
-  
   rescna <- eventReactive(input$goButton, {
     if (input$panel == "cna") 
       csf(cna(dat(), outcome = if (length(ll()) == 0) TRUE else ll(),
+              ordering = order_states[["cnaordering"]],
               con = input$con, cov = input$cov))
   })
   
   resfrscore <- eventReactive(input$goButton, {
     if (input$panel == "frscored_cna") 
       frscored_cna(dat(), outcome = if (length(ll()) == 0) TRUE else ll(),
+                   ordering = order_states[["cnaordering"]],
                    fit.range = input$fit.range, 
                    granularity = input$granularity)
   })
@@ -138,7 +218,7 @@ server <- function(input, output, session){
       formatRound(datatable(resfrscore()[[1]]), 
                   names(resfrscore()[[1]][3:length(names(resfrscore()[[1]]))])))
   
-  # TODO: vizs separately for cna/frscore 
+
   plot <- reactive({
     #cat(file = stderr(), class(res()))
     if(input$panel == "frscored_cna"){
@@ -146,12 +226,6 @@ server <- function(input, output, session){
   }})
   output$plot <- renderVisNetwork(plot())
   
-  # hgraph <- reactive({
-  #   if(input$panel == "cna"){chg(rescna()$condition)[[1]]$graph}
-  # })
-
-############## dynamic UI version
-    
   hgraph <- reactive({
     if(input$panel == "cna"){lapply(rescna()$condition, \(x) chg(x)[[1]]$graph)}
   })
@@ -169,14 +243,14 @@ server <- function(input, output, session){
       local({
         ic <- i
         plotname <- paste0("plot", ic)
-        print(ic)
+        #print(ic)
         output[[plotname]] <- renderGrViz(hgraph()[[ic]])
       })
     }
   })
   
-############
-  #output$hyper <- renderGrViz({hgraph()})
+
+
   
 }
 
