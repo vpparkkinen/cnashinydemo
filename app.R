@@ -1,9 +1,13 @@
+if(!require(frscore) || packageVersion("frscore")< as.package_version("0.4.1.9")){
+  remotes::install_github("vpparkkinen/frscore")
+}
+
+library(frscore)
 library(shiny)
 library(bslib)
 library(cna)
 library(shinythemes)
 library(DT)
-library(frscore)
 library(visNetwork)
 library(causalHyperGraph)
 library(DiagrammeR)
