@@ -1,4 +1,4 @@
-if(!require(frscore) || packageVersion("frscore")< as.package_version("0.4.1.9")){
+if(!require(frscore) || packageVersion("frscore")< as.package_version("0.5.1")){
   remotes::install_github("vpparkkinen/frscore")
 }
 
